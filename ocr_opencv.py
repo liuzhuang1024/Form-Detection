@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 from PIL import Image
-from txt_classify.model import predict as keras_densenet
+# from txt_classify.model import predict as keras_densenet
+import os.path as keras_densenet
 
 class OCR_main():
     def __init__(self):
@@ -11,19 +12,28 @@ class OCR_main():
         # stamp check
         # mask = self.check_stamp(image)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, th1 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        kernel1 = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 1))
+        dilated1 = cv2.dilate(gray, kernel1)
+        gray = cv2.erode(gray, kernel1)
+        _, th1 = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         # th1 = th1 - cv2.bitwise_and(th1, th1, mask=mask)
         th1_orig = th1
         # delete table
         th1 = self.delete_table(th1, 10)
-        rects, out_img, _ = self.text_detect_v1(th1, image.copy(), (0, 255, 0), 4)
+
+        rects, out_img, _ = self.text_detect_v1(
+            th1, image.copy(), (0, 255, 0), 4)
         cv2.imwrite(str(len(rects)) + '.jpg', out_img)
+        cv2.imwrite('100' + '.jpg', out_img)
         merge_rects = []
         if (len(rects)):
             for rect in rects:
                 if rect[3] - rect[1] >= 35 and rect[2] - rect[0] >= 100:
-                    partImg = th1_orig[int(rect[1]):int(rect[3]), int(rect[0]):int(rect[2])]
-                    rects_second, _ = self.text_second_detect(partImg, image.copy(), (255, 0, 0), 2)
+                    partImg = th1_orig[int(rect[1]):int(
+                        rect[3]), int(rect[0]):int(rect[2])]
+                    rects_second, _ = self.text_second_detect(
+                        partImg, image.copy(), (255, 0, 0), 2)
                     if len(rects_second) == 1:
                         merge_rects.append(rect)
                     else:
@@ -33,7 +43,6 @@ class OCR_main():
                 else:
                     merge_rects.append(rect)
         return merge_rects
-
 
     def check_stamp(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -45,7 +54,6 @@ class OCR_main():
         mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
         mask = mask1 + mask2
         return mask
-
 
     def delete_table(self, img, scale):
         try:
@@ -69,7 +77,6 @@ class OCR_main():
         else:
             return img_sub
 
-
     def line_detect(self, image):
         height, width, _ = image.shape
         img_forshow = image.copy()
@@ -77,12 +84,14 @@ class OCR_main():
         mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, th1 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        _, th1 = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         edges = cv2.Canny(th1, 50, 150, apertureSize=5)
         kernel = np.ones((5, 5), np.uint8)
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
         # HoughLines P
-        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=70, maxLineGap=4)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180,
+                                100, minLineLength=70, maxLineGap=4)
         try:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
@@ -92,15 +101,16 @@ class OCR_main():
             pass
 
         mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-        _, mask = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, mask = cv2.threshold(
+            mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         img_fordetect = cv2.subtract(th1, mask)
         return mask, img_forshow, img_fordetect
-
 
     def further_delete_line(self, image, padding):
         height, width, _ = image.shape
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, th1 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        _, th1 = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
         rows_sum = th1.sum(axis=1) // width
         cols_sum = th1.sum(axis=0) // height
 
@@ -124,7 +134,8 @@ class OCR_main():
                 top = 0
             bottom_gaps = rows_loc - bottom_padding
             if np.where(bottom_gaps > 0)[0].sum():
-                min_bottom_gap = abs(np.min(bottom_gaps[np.where(bottom_gaps > 0)]))
+                min_bottom_gap = abs(
+                    np.min(bottom_gaps[np.where(bottom_gaps > 0)]))
                 bottom = bottom_padding + min_bottom_gap - padding
             else:
                 bottom = height
@@ -140,7 +151,8 @@ class OCR_main():
                 left = 0
             right_gaps = cols_loc - right_padding
             if np.where(right_gaps > 0)[0].sum():
-                min_right_gap = abs(np.min(right_gaps[np.where(right_gaps > 0)]))
+                min_right_gap = abs(
+                    np.min(right_gaps[np.where(right_gaps > 0)]))
                 right = right_padding + min_right_gap - padding
             else:
                 right = width
@@ -150,7 +162,6 @@ class OCR_main():
         crop_img = gray[top:bottom, left:right]
         rect = (left, top, right, bottom)
         return crop_img, rect
-
 
     def text_detect_v1(self, thresh, output, color_scalar, color_width):
         padding = 6
@@ -162,11 +173,13 @@ class OCR_main():
 
         try:
             blur = cv2.medianBlur(thresh, 3)
-            temp_img = cv2.morphologyEx(blur, cv2.MORPH_CLOSE, kernel, iterations=2)
+            temp_img = cv2.morphologyEx(
+                blur, cv2.MORPH_CLOSE, kernel, iterations=2)
             line_img = cv2.dilate(temp_img, kernel2, iterations=7)
             height, width = line_img.shape
 
-            contours, _ = cv2.findContours(line_img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(
+                line_img.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             for cnt in contours:
                 x, y, w, h = cv2.boundingRect(cnt)
 
@@ -186,14 +199,14 @@ class OCR_main():
                     continue
                 else:
                     rects.append((x1, y1, x2, y2))
-                    cv2.rectangle(output, (x1, y1), (x2, y2), color_scalar, color_width)
+                    cv2.rectangle(output, (x1, y1), (x2, y2),
+                                  color_scalar, color_width)
 
         except:
             print('text detection error!')
             return rects, output
         else:
             return rects, output, line_img
-
 
     def text_second_detect(self, thresh, output, color_scalar, color_width):
         threshold = 0.05
@@ -229,10 +242,12 @@ class OCR_main():
 
                 for i in range(0, len(lines)):
                     if i == 0:
-                        cv2.line(output, (0, lines[i]), (width, lines[i]), color_scalar, color_width)
+                        cv2.line(
+                            output, (0, lines[i]), (width, lines[i]), color_scalar, color_width)
                     else:
                         if (abs(lines[i] - lines[i - 1]) >= gap):
-                            cv2.line(output, (0, lines[i]), (width, lines[i]), color_scalar, color_width)
+                            cv2.line(
+                                output, (0, lines[i]), (width, lines[i]), color_scalar, color_width)
                             rects.append((0, lines[i - 1], width, lines[i]))
                 return rects, output
             else:
@@ -241,7 +256,6 @@ class OCR_main():
         else:
             rects.append((0, 0, width, height))
             return rects, output
-
 
     def merge_ele(self, list, min_gap):
         list.sort()
@@ -266,14 +280,11 @@ class OCR_main():
         else:
             return output
 
-
     def takeSecond(self, elem):
         return elem[1]
 
-
     def takeFirst(self, elem):
         return elem[0]
-
 
     def sort_dict(self, dict):
         output = {}
@@ -363,7 +374,8 @@ class OCR_main():
             (x1, y1, x2, y2) = rect
             if y1 < cropped_image.shape[0]:
                 if (y2 - y1) > 0 and (x2 - x1) > 0:
-                    partImg = cropped_image[int(y1):int(y2), int(x1):int(x2), :]
+                    partImg = cropped_image[int(
+                        y1):int(y2), int(x1):int(x2), :]
                     # partImg, rect2 = self.further_delete_line(partImg, 3)
                     # if rect2[2] - rect2[0] < 20:
                     #     continue
@@ -383,14 +395,16 @@ class OCR_main():
         # print(time.time() - t0)
 
         return output_list
+
+
 if __name__ == "__main__":
     pass
-    image_file = '9.jpg'
-    image=cv2.imdecode(np.fromfile(image_file, dtype=np.uint8), 1)
-    gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
-    cropped_image = cv2.cvtColor(cv2.add(gray, mask), cv2.COLOR_GRAY2BGR)
-
+    image_file = '1.jpg'
+    image = cv2.imread(image_file)
+    # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # cropped_image = cv2.cvtColor(cv2.add(gray, mask), cv2.COLOR_GRAY2BGR)
     ocr = OCR_main()
-    temp_dict = ocr.rec_txt(image)
-    for i in temp_dict.keys():
-        print(i)
+    temp_dict = ocr.text_detect_v2(image)
+    # print(temp_dict)
+    # for i in temp_dict.keys():
+    #     print(i)
